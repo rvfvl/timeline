@@ -1,8 +1,7 @@
 import { KonvaEventObject } from "konva/types/Node";
 import { Vector2d } from "konva/types/types";
-import React, { Component, Fragment, ReactNode, RefObject } from "react";
+import React, { Component, Fragment, ReactNode } from "react";
 import { Stage, Layer, Line, Text, Rect } from "react-konva";
-import _ from "lodash"
 
 interface TimelineStateProps {
   width: number;
@@ -11,9 +10,17 @@ interface TimelineStateProps {
 
 interface TimelineStageState {
   zoom: number;
+  isDraggingKey: boolean;
   currentXOffset: number;
   currentYOffset: number;
   linePositionX: number;
+  properties: IAnimationProperty[];
+}
+
+interface IAnimationProperty
+{
+  name: string;
+  keyframes: number[];
 }
 
 interface ITimeIntervals {
@@ -30,9 +37,14 @@ export default class TimelineStage extends Component<
 
   public readonly state: TimelineStageState = {
     zoom: 1,
+    isDraggingKey: false,
     currentXOffset: 0,
     currentYOffset: 0,
-    linePositionX: 0
+    linePositionX: 0,
+    properties: [
+      { name: "scale", keyframes: [2] },
+      { name: "transform", keyframes: [32, 40] }
+    ]
   };
 
   private generateTimeIntervals(): ITimeIntervals[] {
@@ -50,8 +62,8 @@ export default class TimelineStage extends Component<
       linePosition += this.minPixelsInSecond * zoom;
     }
 
-    // console.log("CURRENTLY 1 second = ", this.minPixelsInSecond * zoom, "px");
-    // console.log("CURRENT zoom is", zoom);
+    console.log("CURRENTLY 1 second = ", this.minPixelsInSecond * zoom, "px");
+    console.log("CURRENT zoom is", zoom);
 
     return intervalData;
   }
@@ -74,7 +86,7 @@ export default class TimelineStage extends Component<
 
   public componentDidUpdate(_: TimelineStateProps, prevState: TimelineStageState): void
   {
-    const { zoom, linePositionX } = this.state;
+    const { zoom } = this.state;
 
     if (prevState.zoom !== zoom)
     {
@@ -151,9 +163,30 @@ export default class TimelineStage extends Component<
     this.setState({ linePositionX: boundLineX })
   }
 
+  private handlePropertyDragEnd = (e: KonvaEventObject<DragEvent>, property: IAnimationProperty, index: number, secondIndex: number): void =>
+  {
+    const { properties, zoom, currentXOffset } = this.state;
+
+    const propertiesArr = [...properties];
+
+    const itemXPos: number = e.target._lastPos.x + Math.abs(currentXOffset) - this.leftCanvasMargin;
+
+    const snapToSecond: number = Math.round(itemXPos / (zoom * this.minPixelsInSecond));
+
+    console.log(snapToSecond)
+
+    propertiesArr[index].keyframes = propertiesArr[index].keyframes.map((second: number, index: number) => index === secondIndex ? snapToSecond : second);
+
+    // console.log(propertiesArr)
+    this.setState({properties: []})
+    this.setState((prevState: TimelineStageState) => ({ properties: propertiesArr, isDraggingKey: !prevState.isDraggingKey }))
+  }
+
   public render(): ReactNode {
     const { width, height } = this.props;
-    const { currentXOffset, linePositionX } = this.state;
+    const { currentXOffset, linePositionX, properties, zoom } = this.state;
+
+    const minPropertyYPos: number = 75;
 
     return (
       <div style={{ backgroundColor: "darkgrey" }}>
@@ -164,8 +197,8 @@ export default class TimelineStage extends Component<
           onWheel={this.handleTimelineWheel}
           dragBoundFunc={this.handleDragBound}
         >
-          <Layer draggable onDragMove={this.handleLineDragMove} dragBoundFunc={() => ({x: 0, y: 0})}>
-            <Rect x={0} y={0} offsetX={currentXOffset} width={width} height={50} fill="white" />
+          <Layer >
+            <Rect x={0} y={0} offsetX={currentXOffset} width={width} height={50} fill="white" draggable={true} onDragMove={this.handleLineDragMove} dragBoundFunc={() => ({x: currentXOffset, y: 0})} />
 
             {this.generateTimeIntervals().map(
               (
@@ -203,9 +236,25 @@ export default class TimelineStage extends Component<
               }
             )}
 
+            {properties.map((property: IAnimationProperty, index: number) => (
+              property.keyframes.map((second: number, secondIndex: number) => (
+                <Rect
+                  draggable
+                  onDragEnd={(e: KonvaEventObject<DragEvent>) => this.handlePropertyDragEnd(e, property, index, secondIndex)}
+                  dragBoundFunc={(pos) => ({ x: pos.x, y: minPropertyYPos + index * 35 })}
+                  x={(second * (this.minPixelsInSecond * zoom)) + this.leftCanvasMargin} 
+                  offsetX={10} y={minPropertyYPos + index * 35} 
+                  width={10} height={10} 
+                  fill="black" 
+                  rotation={135}  
+                />
+              ))
+            ))}
+
             <Line x={linePositionX} y={0} points={[this.leftCanvasMargin, 0, this.leftCanvasMargin, 600]} stroke="blue" />
           </Layer>
         </Stage>
+        {Math.abs(currentXOffset)}
       </div>
     );
   }
