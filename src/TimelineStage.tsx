@@ -1,7 +1,9 @@
+import Konva from "konva";
 import { KonvaEventObject } from "konva/types/Node";
 import { Vector2d } from "konva/types/types";
-import React, { Component, Fragment, ReactNode } from "react";
-import { Stage, Layer, Line, Text, Rect } from "react-konva";
+import React, { Component, Fragment, ReactNode, RefObject } from "react";
+import { Stage, Layer, Line, Text, Rect, Group } from "react-konva";
+import TimelineProperty from "./TimelineProperty";
 
 interface TimelineStateProps {
   width: number;
@@ -14,13 +16,19 @@ interface TimelineStageState {
   currentXOffset: number;
   currentYOffset: number;
   linePositionX: number;
+  mode: string;
   properties: IAnimationProperty[];
 }
 
 interface IAnimationProperty
 {
   name: string;
-  keyframes: number[];
+  keyframes: IKeyframe[];
+}
+
+export interface IKeyframe
+{
+  second: number; value: number;
 }
 
 interface ITimeIntervals {
@@ -35,15 +43,30 @@ export default class TimelineStage extends Component<
   private minPixelsInSecond: number = 5;
   private leftCanvasMargin: number = 10;
 
+  private curveLineRef: RefObject<Konva.Line> = React.createRef();
+
   public readonly state: TimelineStageState = {
     zoom: 1,
     isDraggingKey: false,
     currentXOffset: 0,
     currentYOffset: 0,
     linePositionX: 0,
+    mode: "keyframe",
     properties: [
-      { name: "scale", keyframes: [2] },
-      { name: "transform", keyframes: [32, 40] }
+      { name: "scale", keyframes: [{
+        second: 2, value: 0
+      }] },
+      { name: "transform", keyframes: [{
+        second: 0, value: 1
+      }, {
+        second: 40, value: 3
+      }, {
+        second: 43, value: 3
+      }, {
+        second: 50, value: 3
+      }, {
+        second: 55, value: 2
+      }] }
     ]
   };
 
@@ -62,18 +85,12 @@ export default class TimelineStage extends Component<
       linePosition += this.minPixelsInSecond * zoom;
     }
 
-    console.log("CURRENTLY 1 second = ", this.minPixelsInSecond * zoom, "px");
-    console.log("CURRENT zoom is", zoom);
-
     return intervalData;
   }
 
   private handleTimelineWheel = (event: KonvaEventObject<WheelEvent>): void => {
     // @ts-ignore
     const isZoomIn: boolean = event.evt.wheelDeltaY > 0 ? true : false;
-
-    if (!event.evt.shiftKey)
-      return;
 
     this.setState((prevState: TimelineStageState) => ({
       zoom: isZoomIn
@@ -97,11 +114,11 @@ export default class TimelineStage extends Component<
   private handleDragBound = (position: Vector2d): Vector2d => {
     const boundX: number = position.x > 0 ? 0 : position.x
 
-    this.updateCurrentOffset(boundX, 0)
+    this.updateCurrentOffset(boundX, position.y)
     
     return {
       x: boundX,
-      y: 0
+      y: position.y
     };
   }
 
@@ -163,19 +180,23 @@ export default class TimelineStage extends Component<
     this.setState({ linePositionX: boundLineX })
   }
 
-  private handlePropertyDragEnd = (e: KonvaEventObject<DragEvent>, property: IAnimationProperty, index: number, secondIndex: number): void =>
+  private handlePropertyDragEnd = (e: KonvaEventObject<DragEvent>, index: number, secondIndex: number): void =>
   {
     const { properties, zoom, currentXOffset } = this.state;
 
     const propertiesArr = [...properties];
 
-    const itemXPos: number = e.target._lastPos.x + Math.abs(currentXOffset) - this.leftCanvasMargin;
+    const itemXPos: number = e.target._lastPos.x + Math.abs(currentXOffset);
+    const itemYPos: number = ((this.curveLineRef.current?.getAbsolutePosition().y ?? 0) - e.target.getAbsolutePosition().y + 10) / 100
 
     const snapToSecond: number = Math.round(itemXPos / (zoom * this.minPixelsInSecond));
 
-    console.log(snapToSecond)
+    console.log("Y POS ", itemYPos)
 
-    propertiesArr[index].keyframes = propertiesArr[index].keyframes.map((second: number, index: number) => index === secondIndex ? snapToSecond : second);
+    propertiesArr[index].keyframes = propertiesArr[index].keyframes.map((second: IKeyframe, index: number) => index === secondIndex ? {
+      second: snapToSecond,
+      value: itemYPos
+    } : second);
 
     // console.log(propertiesArr)
     this.setState({properties: []})
@@ -184,7 +205,7 @@ export default class TimelineStage extends Component<
 
   public render(): ReactNode {
     const { width, height } = this.props;
-    const { currentXOffset, linePositionX, properties, zoom } = this.state;
+    const { currentXOffset, linePositionX, properties, zoom, currentYOffset, mode } = this.state;
 
     const minPropertyYPos: number = 75;
 
@@ -197,64 +218,96 @@ export default class TimelineStage extends Component<
           onWheel={this.handleTimelineWheel}
           dragBoundFunc={this.handleDragBound}
         >
-          <Layer >
-            <Rect x={0} y={0} offsetX={currentXOffset} width={width} height={50} fill="white" draggable={true} onDragMove={this.handleLineDragMove} dragBoundFunc={() => ({x: currentXOffset, y: 0})} />
+          <Layer>
+            <Group offsetX={-10} offsetY={currentYOffset}>
+              <Rect x={0} y={0} offsetX={currentXOffset + 10}  width={width} height={50} fill="white" draggable={true} onDragMove={this.handleLineDragMove} dragBoundFunc={() => ({x: currentXOffset, y: 0})} />
 
-            {this.generateTimeIntervals().map(
-              (
-                { linePosition, currentSecond }: ITimeIntervals,
-                index: number
-              ) => {
-                const timeLabel: string = this.generateTimeLabel(currentSecond);
+              {this.generateTimeIntervals().map(
+                (
+                  { linePosition, currentSecond }: ITimeIntervals,
+                  index: number
+                ) => {
+                  const timeLabel: string = this.generateTimeLabel(currentSecond);
 
-                if (index % this.getLabelsPerZoom() === 0 && this.isTimelineInView(linePosition)) {
-                  return (
-                    <Fragment key={linePosition.toString() + index.toString()}>
-                      <Line
-                        x={linePosition + this.leftCanvasMargin}
-                        points={[0, 20, 0, 0, 0, 0, 0, 0]}
-                        stroke="black"
-                      />
-                      <Text
-                        x={linePosition - 3 + this.leftCanvasMargin}
-                        y={30}
-                        text={timeLabel}
-                        fill="black"
-                      />
+                  if (index % this.getLabelsPerZoom() === 0 && this.isTimelineInView(linePosition)) {
+                    return (
+                      <Fragment key={linePosition.toString() + index.toString()}>
+                        <Line
+                          x={linePosition}
+                          points={[0, 20, 0, 0, 0, 0, 0, 0]}
+                          stroke="black"
+                        />
+                        <Text
+                          x={linePosition}
+                          y={30}
+                          text={timeLabel}
+                          fill="black"
+                        />
 
-                      <Line
-                        x={linePosition + this.leftCanvasMargin}
-                        y={50}
-                        points={[0, 600, 0, 0, 0, 0, 0, 0]}
-                        stroke="white"
-                      />
-                    </Fragment>
-                  );
+                        <Line
+                          x={linePosition}
+                          y={50}
+                          points={[0, 600, 0, 0, 0, 0, 0, 0]}
+                          stroke="white"
+                        />
+                      </Fragment>
+                    );
+                  }
+
+                  return null;
                 }
+              )}
 
-                return null;
-              }
-            )}
+
+              
+            </Group>
 
             {properties.map((property: IAnimationProperty, index: number) => (
-              property.keyframes.map((second: number, secondIndex: number) => (
-                <Rect
-                  draggable
-                  onDragEnd={(e: KonvaEventObject<DragEvent>) => this.handlePropertyDragEnd(e, property, index, secondIndex)}
-                  dragBoundFunc={(pos) => ({ x: pos.x, y: minPropertyYPos + index * 35 })}
-                  x={(second * (this.minPixelsInSecond * zoom)) + this.leftCanvasMargin} 
-                  offsetX={10} y={minPropertyYPos + index * 35} 
-                  width={10} height={10} 
-                  fill="black" 
-                  rotation={135}  
-                />
-              ))
-            ))}
+                property.keyframes.map((second: IKeyframe, secondIndex: number) => {
+                  if (mode === "keyframe")
+                  {
+                    return (
+                      <Rect
+                        draggable
+                        onDragEnd={(e: KonvaEventObject<DragEvent>) => this.handlePropertyDragEnd(e, index, secondIndex)}
+                        onDragMove={(e) => console.log(e.target.getPosition().x)}
+                        dragBoundFunc={(pos) => ({ x: pos.x, y: pos.y })}
+                        x={(second.second * (this.minPixelsInSecond * zoom))} 
+                        offsetX={20} offsetY={5} y={minPropertyYPos + index * 35} 
+                        width={10} height={10} 
+                        fill="black" 
+                        rotation={135}  
+                      />
+                    )
+                  }
 
-            <Line x={linePositionX} y={0} points={[this.leftCanvasMargin, 0, this.leftCanvasMargin, 600]} stroke="blue" />
+                  return (
+                    <TimelineProperty 
+                      handlePropertyDragEnd={this.handlePropertyDragEnd}
+                      propertyIndex={index}
+                      secondIndex={secondIndex}
+                      second={second}
+                      zoom={zoom}
+                      minPixelsInSecond={this.minPixelsInSecond}
+                      leftCanvasMargin={this.leftCanvasMargin}
+                      minPropertyYPos={minPropertyYPos}
+                      curveLineRef={this.curveLineRef}
+                    />
+                  )
+                })
+              ))}
+
+            {mode === "curve" && (
+              <Line ref={this.curveLineRef} x={0} y={200} points={[width, 0, 0, 0, 0, 0, 0, 0]} stroke="red" />
+            )}
+
+            <Line offsetX={-10} offsetY={currentYOffset} x={linePositionX} y={0} points={[0, 0, 0, 600]} stroke="blue" />
           </Layer>
         </Stage>
-        {Math.abs(currentXOffset)}
+        {"x: " + currentXOffset}
+        {"y: " + currentYOffset}
+        <button onClick={() => this.setState({ mode: "keyframe"})}>KEYFRAME</button>
+        <button onClick={() => this.setState({ mode: "curve"})}>CURVE</button>
       </div>
     );
   }
