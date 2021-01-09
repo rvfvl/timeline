@@ -43,7 +43,14 @@ export default class TimelineStage extends Component<
   private minPixelsInSecond: number = 5;
   private leftCanvasMargin: number = 10;
 
+  private keyframesArr: any[] = [];
+
+  private labelsRef: RefObject<Konva.Group> = React.createRef();
+
   private curveLineRef: RefObject<Konva.Line> = React.createRef();
+  private keyframeGroupRef: RefObject<Konva.Group> = React.createRef();
+  private stageRef: RefObject<Konva.Stage> = React.createRef();
+
 
   public readonly state: TimelineStageState = {
     zoom: 1,
@@ -60,12 +67,6 @@ export default class TimelineStage extends Component<
         second: 0, value: 1
       }, {
         second: 40, value: 3
-      }, {
-        second: 43, value: 3
-      }, {
-        second: 50, value: 3
-      }, {
-        second: 55, value: 2
       }] }
     ]
   };
@@ -101,6 +102,11 @@ export default class TimelineStage extends Component<
     }));
   };
 
+  // public componentDidMount(): void
+  // {
+  //   console.log(this.keyframesArr)
+  // }
+
   public componentDidUpdate(_: TimelineStateProps, prevState: TimelineStageState): void
   {
     const { zoom } = this.state;
@@ -114,11 +120,11 @@ export default class TimelineStage extends Component<
   private handleDragBound = (position: Vector2d): Vector2d => {
     const boundX: number = position.x > 0 ? 0 : position.x
 
-    this.updateCurrentOffset(boundX, position.y)
+    this.updateCurrentOffset(boundX, this.stageRef.current?.absolutePosition().y ?? 0)
     
     return {
       x: boundX,
-      y: position.y
+      y: (this.stageRef.current?.absolutePosition().y ?? 0)
     };
   }
 
@@ -187,7 +193,7 @@ export default class TimelineStage extends Component<
     const propertiesArr = [...properties];
 
     const itemXPos: number = e.target._lastPos.x + Math.abs(currentXOffset);
-    const itemYPos: number = ((this.curveLineRef.current?.getAbsolutePosition().y ?? 0) - e.target.getAbsolutePosition().y + 10) / 100
+    const itemYPos: number = ((this.curveLineRef.current?.getAbsolutePosition().y ?? 0) - e.target.getAbsolutePosition().y + 10) / 50
 
     const snapToSecond: number = Math.round(itemXPos / (zoom * this.minPixelsInSecond));
 
@@ -203,6 +209,26 @@ export default class TimelineStage extends Component<
     this.setState((prevState: TimelineStageState) => ({ properties: propertiesArr, isDraggingKey: !prevState.isDraggingKey }))
   }
 
+  private handleWheel = (e: React.UIEvent<Element, UIEvent>) =>
+  {
+    const { currentYOffset } = this.state
+
+    const el = document.getElementById("area");
+    
+
+    const val: number = (el?.scrollTop ?? 0) + currentYOffset
+
+
+    console.log("VAL", val)
+
+    this.stageRef.current?.offsetY(el?.scrollTop ?? 0)
+    this.stageRef.current?.draw()
+
+    console.log("LABELS REF", this.stageRef.current?.offsetY())
+    //this.setState((prev: TimelineStageState) => ({ currentYOffset: val }));
+
+  }
+
   public render(): ReactNode {
     const { width, height } = this.props;
     const { currentXOffset, linePositionX, properties, zoom, currentYOffset, mode } = this.state;
@@ -211,7 +237,9 @@ export default class TimelineStage extends Component<
 
     return (
       <div style={{ backgroundColor: "darkgrey" }}>
+        <div id="area" onScroll={this.handleWheel} style={{border: "1px solid black", height: 200, width: 1000, overflow: "scroll"}}><div style={{height: 1000, width: 1000}}></div></div>
         <Stage
+          ref={this.stageRef}
           width={width}
           height={height}
           draggable={true}
@@ -219,7 +247,7 @@ export default class TimelineStage extends Component<
           dragBoundFunc={this.handleDragBound}
         >
           <Layer>
-            <Group offsetX={-10} offsetY={currentYOffset}>
+            <Group offsetX={-10} x={0} y={0} offsetY={this.stageRef.current?.offsetY() ?? 0} ref={this.labelsRef}>
               <Rect x={0} y={0} offsetX={currentXOffset + 10}  width={width} height={50} fill="white" draggable={true} onDragMove={this.handleLineDragMove} dragBoundFunc={() => ({x: currentXOffset, y: 0})} />
 
               {this.generateTimeIntervals().map(
@@ -262,16 +290,24 @@ export default class TimelineStage extends Component<
               
             </Group>
 
-            {properties.map((property: IAnimationProperty, index: number) => (
+            <Group ref={this.keyframeGroupRef}> 
+              {properties.map((property: IAnimationProperty, index: number) => (
                 property.keyframes.map((second: IKeyframe, secondIndex: number) => {
+                  this.keyframesArr[index] = []
+
                   if (mode === "keyframe")
                   {
                     return (
                       <Rect
+                        ref={(node) => this.keyframesArr[index][secondIndex] = node}
                         draggable
                         onDragEnd={(e: KonvaEventObject<DragEvent>) => this.handlePropertyDragEnd(e, index, secondIndex)}
                         onDragMove={(e) => console.log(e.target.getPosition().x)}
-                        dragBoundFunc={(pos) => ({ x: pos.x, y: pos.y })}
+                        dragBoundFunc={(pos) => {
+                          console.log("POS", this.keyframesArr[index][secondIndex].getAbsolutePosition())
+
+                          return { x: pos.x, y: this.keyframesArr[index][secondIndex].getAbsolutePosition().y  }
+                        }}
                         x={(second.second * (this.minPixelsInSecond * zoom))} 
                         offsetX={20} offsetY={5} y={minPropertyYPos + index * 35} 
                         width={10} height={10} 
@@ -282,20 +318,25 @@ export default class TimelineStage extends Component<
                   }
 
                   return (
-                    <TimelineProperty 
+                    <TimelineProperty
+                      ref={(node) => this.keyframesArr[index][secondIndex] = node}
                       handlePropertyDragEnd={this.handlePropertyDragEnd}
                       propertyIndex={index}
                       secondIndex={secondIndex}
                       second={second}
                       zoom={zoom}
+                      id={`#${index}-${secondIndex}`}
                       minPixelsInSecond={this.minPixelsInSecond}
                       leftCanvasMargin={this.leftCanvasMargin}
                       minPropertyYPos={minPropertyYPos}
                       curveLineRef={this.curveLineRef}
+                      nextKeyframe={property.keyframes[secondIndex + 1]}
+                      groupArr={this.keyframesArr}
                     />
                   )
                 })
               ))}
+            </Group>
 
             {mode === "curve" && (
               <Line ref={this.curveLineRef} x={0} y={200} points={[width, 0, 0, 0, 0, 0, 0, 0]} stroke="red" />
