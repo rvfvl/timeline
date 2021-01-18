@@ -29,11 +29,20 @@ interface IAnimationProperty
 export interface IKeyframe
 {
   second: number; value: number;
+  handles: {c1: number, c2: number};
+  id: number;
 }
 
 interface ITimeIntervals {
   linePosition: number;
   currentSecond: number;
+}
+
+export type ISingleMappedRef = IKeyframe & { ref: RefObject<Konva.Rect> };
+
+interface IMappedRefs 
+{
+  [key: string]: ISingleMappedRef[];
 }
 
 export default class TimelineStage extends Component<
@@ -51,6 +60,8 @@ export default class TimelineStage extends Component<
   private keyframeGroupRef: RefObject<Konva.Group> = React.createRef();
   private stageRef: RefObject<Konva.Stage> = React.createRef();
 
+  private keyframeRefs: IMappedRefs;
+
 
   public readonly state: TimelineStageState = {
     zoom: 1,
@@ -61,15 +72,54 @@ export default class TimelineStage extends Component<
     mode: "keyframe",
     properties: [
       { name: "scale", keyframes: [{
-        second: 2, value: 0
+        id: 1, second: 2, value: 0, handles: {c1: 0.5, c2: 0.5}
       }] },
       { name: "transform", keyframes: [{
-        second: 0, value: 1
+        id: 1, second: 0, value: 1, handles: {c1: 0.5, c2: 0.5}
       }, {
-        second: 40, value: 3
+        id: 2, second: 40, value: 3, handles: {c1: 0.5, c2: 0.5}
+      }, {
+        id: 3, second: 50, value: 2, handles: {c1: 0.5, c2: 0.5}
       }] }
     ]
   };
+
+  constructor(props: TimelineStateProps)
+  {
+    super(props);
+
+    this.keyframeRefs = this.getKeyframeRefs();
+  }
+
+  private getKeyframeRefs = () =>
+  {
+    const { properties } = this.state;
+
+    const mappedRefs: IMappedRefs = properties.reduce((acc: any, property) => {
+
+      if (!acc[property.name])
+        acc[property.name] = []
+
+      const propertyRefs = property.keyframes.map((prop: IKeyframe) => ({
+        ...prop,
+        ref: React.createRef()
+      }))
+
+      acc[property.name].push(...propertyRefs)
+
+      return acc;
+    }, {})
+
+    return mappedRefs;
+  }
+
+  private getKeyframeInProperty(propertyName: string, keyframeId: number): ISingleMappedRef | null
+  {
+    if (!(propertyName in this.keyframeRefs))
+      return null;
+
+    return this.keyframeRefs[propertyName].find((keyframe: ISingleMappedRef) => keyframe.id === keyframeId) ?? null;
+  }
 
   private generateTimeIntervals(): ITimeIntervals[] {
     const { zoom } = this.state;
@@ -102,10 +152,14 @@ export default class TimelineStage extends Component<
     }));
   };
 
-  // public componentDidMount(): void
-  // {
-  //   console.log(this.keyframesArr)
-  // }
+  public componentDidMount(): void
+  {
+    this.labelsRef.current?.zIndex(0)
+    this.keyframeGroupRef.current?.zIndex(1)
+
+    // console.log("labels ref z index", this.labelsRef.current?.zIndex())
+    // console.log("keyframeGroupRef z index", this.keyframeGroupRef.current?.zIndex())
+  }
 
   public componentDidUpdate(_: TimelineStateProps, prevState: TimelineStageState): void
   {
@@ -200,6 +254,7 @@ export default class TimelineStage extends Component<
     console.log("Y POS ", itemYPos)
 
     propertiesArr[index].keyframes = propertiesArr[index].keyframes.map((second: IKeyframe, index: number) => index === secondIndex ? {
+      ...second,
       second: snapToSecond,
       value: itemYPos
     } : second);
@@ -316,13 +371,14 @@ export default class TimelineStage extends Component<
                       />
                     )
                   }
-
+                  
                   return (
                     <TimelineProperty
-                      ref={(node) => this.keyframesArr[index][secondIndex] = node}
+                      // ref={(node) => this.keyframesArr[index][secondIndex] = node}
                       handlePropertyDragEnd={this.handlePropertyDragEnd}
                       propertyIndex={index}
                       secondIndex={secondIndex}
+                      keyframeGroupRef={this.keyframeGroupRef}
                       second={second}
                       zoom={zoom}
                       id={`#${index}-${secondIndex}`}
@@ -330,8 +386,12 @@ export default class TimelineStage extends Component<
                       leftCanvasMargin={this.leftCanvasMargin}
                       minPropertyYPos={minPropertyYPos}
                       curveLineRef={this.curveLineRef}
-                      nextKeyframe={property.keyframes[secondIndex + 1]}
-                      groupArr={this.keyframesArr}
+                      // nextKeyframe={property.keyframes[secondIndex + 1]}
+                      // groupArr={this.keyframesArr}
+                      stageRef={this.stageRef}
+                      currentKeyframe={this.getKeyframeInProperty(property.name, second.id)}
+                      nextKeyframe={this.getKeyframeInProperty(property.name, second.id + 1)}
+                      prevKeyframe={this.getKeyframeInProperty(property.name, second.id - 1)}
                     />
                   )
                 })
