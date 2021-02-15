@@ -38,7 +38,7 @@ interface ITimeIntervals {
   currentSecond: number;
 }
 
-export type ISingleMappedRef = IKeyframe & { ref: RefObject<Konva.Rect> };
+export type ISingleMappedRef = IKeyframe & { ref: RefObject<Konva.Rect>, c1Ref: RefObject<Konva.Rect>, c2Ref: RefObject<Konva.Rect> };
 
 interface IMappedRefs 
 {
@@ -102,7 +102,9 @@ export default class TimelineStage extends Component<
 
       const propertyRefs = property.keyframes.map((prop: IKeyframe) => ({
         ...prop,
-        ref: React.createRef()
+        ref: React.createRef(),
+        c1Ref: React.createRef(),
+        c2Ref: React.createRef()
       }))
 
       acc[property.name].push(...propertyRefs)
@@ -345,7 +347,9 @@ export default class TimelineStage extends Component<
               
             </Group>
 
-            <Group ref={this.keyframeGroupRef}> 
+            <Group ref={this.keyframeGroupRef} onDragMove={() => {
+              console.log("ESSA")
+            }}> 
               {properties.map((property: IAnimationProperty, index: number) => (
                 property.keyframes.map((second: IKeyframe, secondIndex: number) => {
                   this.keyframesArr[index] = []

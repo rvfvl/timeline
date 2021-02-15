@@ -97,13 +97,13 @@ export default class TimelineProperty extends Component<TimelinePropertyProps> {
 
   render()
   {
-    const { handlePropertyDragEnd, propertyIndex, secondIndex, second, minPixelsInSecond, nextKeyframe, zoom, id, currentKeyframe, keyframeGroupRef } = this.props;
+    const { handlePropertyDragEnd, propertyIndex, secondIndex, second, minPixelsInSecond, nextKeyframe, zoom, id, currentKeyframe, prevKeyframe, } = this.props;
     console.log(currentKeyframe?.ref ?? 0)
 
     return (
       <>
         {
-          this.state.ref && (
+          this.state.ref && nextKeyframe && (
             <Shape
               stroke={'yellow'}
               strokeWidth={1}
@@ -115,13 +115,22 @@ export default class TimelineProperty extends Component<TimelinePropertyProps> {
                 // @ts-ignore
                 ctx.moveTo(currentKeyframe?.ref?.x() ?? 0, currentKeyframe?.ref.y() ?? 0);
                 ctx.bezierCurveTo(
-                  this.control1.current?.x() ?? 0,
-                  this.control1.current?.y() ?? 0,
-                  100,
-                  100,
-                  nextKeyframe?.ref.current?.getPosition().x ?? 0,
-                  nextKeyframe?.ref.current?.getPosition().y ?? 0
+                  // @ts-ignore
+                  currentKeyframe?.c2Ref.current.getPosition().x,
+                  // @ts-ignore
+                  currentKeyframe?.c2Ref.current.getPosition().y,
+                  // @ts-ignore
+                  nextKeyframe?.c1Ref.current.getPosition().x,
+                  // @ts-ignore
+                  nextKeyframe?.c1Ref.current.getPosition().y,
+                  // @ts-ignore
+                  nextKeyframe.ref.getPosition().x,
+                  // @ts-ignore
+                  nextKeyframe.ref.getPosition().y
                 );
+
+                // @ts-ignore
+                //ctx.lineTo(this.state.ref.getPosition().x, this.state.ref.getPosition().x)
 
                 ctx.fillStrokeShape(shape);
 
@@ -157,9 +166,18 @@ export default class TimelineProperty extends Component<TimelinePropertyProps> {
           onDragEnd={(e: KonvaEventObject<DragEvent>) => handlePropertyDragEnd(e, propertyIndex, secondIndex)}
           onDragMove={() => {
             // @ts-ignore
-            this.control1.current?.x((currentKeyframe?.ref.x() ?? 0) + 30)
+            currentKeyframe?.c1Ref.current.x((currentKeyframe?.ref.x() ?? 0) - 30)
             // @ts-ignore
-            this.control1.current?.y((currentKeyframe?.ref.y() ?? 0) ?? 0)
+            currentKeyframe?.c1Ref.current.y((currentKeyframe?.ref.y() ?? 0) ?? 0)
+
+            // @ts-ignore
+            currentKeyframe?.c2Ref.current.x((currentKeyframe?.ref.x() ?? 0) + 30)
+            // @ts-ignore
+            currentKeyframe?.c2Ref.current.y((currentKeyframe?.ref.y() ?? 0) ?? 0)
+
+            console.log("CURRENT", currentKeyframe)
+            console.log("PREV", prevKeyframe)
+            console.log("NEXT", nextKeyframe)
           }}
           dragBoundFunc={(pos) => ({ x: pos.x, y: pos.y })}
           x={(second.second * (minPixelsInSecond * zoom))}
@@ -167,20 +185,20 @@ export default class TimelineProperty extends Component<TimelinePropertyProps> {
           offsetY={5}
           y={200 - (second.value * 50) + 10}
           width={10} height={10}
-          fill="black"
+          fill="red"
           rotation={135}
           id={id}
         />
 
         {this.state.ref && (
           <Rect
-          ref={this.control1}
+          ref={currentKeyframe?.c1Ref}
           draggable
 
           // onDragMove={() => this.control1.current?.x(keyframeGroupRef.current?.findOne(`#${id}`)?.x() ?? 0)}
           // dragBoundFunc={(pos) => ({ x: pos.x, y: pos.y })}
         // @ts-ignore
-          x={(currentKeyframe.ref.x() ?? 0) + 30}
+          x={(currentKeyframe.ref.x() ?? 0) - 30}
           offsetX={10}
           offsetY={0}
            // @ts-ignore
@@ -191,21 +209,25 @@ export default class TimelineProperty extends Component<TimelinePropertyProps> {
           id={id}
         />
         )}
-        {/* <Rect
-          ref={this.control2}
-          draggable
-          // onDragEnd={(e: KonvaEventObject<DragEvent>) => handlePropertyDragEnd(e, propertyIndex, secondIndex)}
-          
-          // dragBoundFunc={(pos) => ({ x: pos.x, y: pos.y })}
-          x={(second.second * (minPixelsInSecond * zoom))}
-          
-          offsetY={0}
-          y={200 - (second.value * 50) + 10}
-          width={10} height={10}
-          fill="blue"
-          rotation={135}
-          id={id}
-        /> */}
+        {this.state.ref && (
+          <Rect
+          ref={currentKeyframe?.c2Ref}
+            draggable
+            // onDragEnd={(e: KonvaEventObject<DragEvent>) => handlePropertyDragEnd(e, propertyIndex, secondIndex)}
+            
+            // dragBoundFunc={(pos) => ({ x: pos.x, y: pos.y })}
+            // @ts-ignore
+            x={(currentKeyframe.ref.x() ?? 0) + 30}
+            
+            offsetY={0}
+            y={200 - (second.value * 50) + 10}
+            width={10} height={10}
+            fill="green"
+            rotation={135}
+            id={id}
+          />
+        )}
+        
 
       </>
     )
